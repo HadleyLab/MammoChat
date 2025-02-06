@@ -20,8 +20,13 @@ from openai import AsyncOpenAI
 import os
 from config import config, TRUSTED_SOURCES
 
-# Set OpenAI API key in environment variable
-os.environ["OPENAI_API_KEY"] = config.openai_api_key
+try:
+    # Set OpenAI API key in environment variable
+    os.environ["OPENAI_API_KEY"] = config.openai_api_key
+    st.write("OpenAI API key configured successfully")
+except Exception as e:
+    st.error(f"Failed to configure OpenAI API key: {str(e)}")
+    logfire.error("OpenAI API key configuration failed", error=str(e))
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -37,14 +42,28 @@ from pydantic_ai.messages import (
 )
 from agent import chat_agent, SourceDeps
 
-openai_client = AsyncOpenAI()  # Will use OPENAI_API_KEY from environment
-supabase: Client = Client(
-    config.supabase_url,
-    config.supabase_service_key
-)
+try:
+    openai_client = AsyncOpenAI()  # Will use OPENAI_API_KEY from environment
+    st.write("OpenAI client initialized successfully")
+except Exception as e:
+    st.error(f"Failed to initialize OpenAI client: {str(e)}")
+    logfire.error("OpenAI client initialization failed", error=str(e))
 
-# Configure logfire to suppress warnings (optional)
-logfire.configure(send_to_logfire='never')
+try:
+    supabase: Client = Client(
+        config.supabase_url,
+        config.supabase_service_key
+    )
+    st.write("Supabase client initialized successfully")
+except Exception as e:
+    st.error(f"Failed to initialize Supabase client: {str(e)}")
+    logfire.error("Supabase client initialization failed", error=str(e))
+
+# Enable logging in cloud environment
+if 'STREAMLIT_CLOUD' in os.environ:
+    logfire.configure(send_to_logfire='always')
+else:
+    logfire.configure(send_to_logfire='never')
 
 class ChatMessage(TypedDict):
     """Format of messages sent to the browser/API."""

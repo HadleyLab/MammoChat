@@ -15,6 +15,7 @@ import logfire
 import asyncio
 import os
 from typing import List, Optional
+import streamlit as st
 
 from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.models.openai import OpenAIModel
@@ -33,8 +34,9 @@ sources_list = "\n".join(f"{i+1}. {source}" for i, source in enumerate(TRUSTED_S
 # Initialize OpenAI model
 model = OpenAIModel(config.llm_model)
 
-# Configure logging
-logfire.configure(send_to_logfire='if-token-present')
+# Configure logging with more verbose error reporting
+logfire.configure(send_to_logfire='always')
+logfire.info("Agent module initializing")
 
 @dataclass
 class SourceDeps:
@@ -86,7 +88,8 @@ async def get_embedding(text: str, openai_client: AsyncOpenAI) -> List[float]:
         )
         return response.data[0].embedding
     except Exception as e:
-        print(f"Error generating embedding: {e}")
+        logfire.error("Error generating embedding", error=str(e))
+        st.error(f"Failed to generate embedding: {str(e)}")
         return [0] * 1536  # Return zero vector on error
 
 @chat_agent.tool
@@ -132,8 +135,10 @@ async def retrieve_relevant_documentation(ctx: RunContext[SourceDeps], user_quer
         return "\n\n---\n\n".join(formatted_chunks)
         
     except Exception as e:
-        print(f"Error retrieving documentation: {e}")
-        return f"Error retrieving documentation: {str(e)}"
+        error_msg = f"Error retrieving documentation: {str(e)}"
+        logfire.error(error_msg)
+        st.error(error_msg)
+        return error_msg
 
 @chat_agent.tool
 async def list_documentation_pages(ctx: RunContext[SourceDeps]) -> List[str]:
@@ -156,7 +161,9 @@ async def list_documentation_pages(ctx: RunContext[SourceDeps]) -> List[str]:
         return urls
         
     except Exception as e:
-        print(f"Error retrieving documentation pages: {e}")
+        error_msg = f"Error retrieving documentation pages: {str(e)}"
+        logfire.error(error_msg)
+        st.error(error_msg)
         return []
 
 @chat_agent.tool
@@ -195,5 +202,7 @@ async def get_page_content(ctx: RunContext[SourceDeps], url: str) -> str:
         return "\n\n".join(formatted_content)
         
     except Exception as e:
-        print(f"Error retrieving page content: {e}")
-        return f"Error retrieving page content: {str(e)}"
+        error_msg = f"Error retrieving page content: {str(e)}"
+        logfire.error(error_msg)
+        st.error(error_msg)
+        return error_msg
