@@ -16,9 +16,33 @@ import os
 from dataclasses import dataclass
 from typing import List
 from dotenv import load_dotenv
+import streamlit as st
 
-# Load environment variables
+# Load environment variables as fallback
 load_dotenv()
+
+def get_secret(key: str, default: str = '') -> str:
+    """Get secret from Streamlit secrets or environment variables.
+    
+    Args:
+        key: The key to look up
+        default: Default value if neither source has the key
+        
+    Returns:
+        The secret value
+    """
+    try:
+        return st.secrets["api_keys"][key]
+    except (FileNotFoundError, KeyError):
+        # Fall back to environment variables if Streamlit secrets not available
+        env_key = key.upper()
+        if key == 'openai':
+            env_key = 'OPENAI_API_KEY'
+        elif key == 'supabase_url':
+            env_key = 'SUPABASE_URL'
+        elif key == 'supabase_service_key':
+            env_key = 'SUPABASE_SERVICE_KEY'
+        return os.getenv(env_key, default)
 
 # Model configurations
 EMBEDDING_MODEL: str = "text-embedding-3-small"
@@ -50,10 +74,10 @@ class Config:
         match_threshold (float): Minimum similarity score for content matching
         match_count (int): Number of relevant matches to return
     """
-    # API Keys (from environment)
-    openai_api_key: str = os.getenv('OPENAI_API_KEY', '')
-    supabase_url: str = os.getenv('SUPABASE_URL', '')
-    supabase_service_key: str = os.getenv('SUPABASE_SERVICE_KEY', '')
+    # API Keys (from Streamlit secrets or environment variables)
+    openai_api_key: str = get_secret('openai')
+    supabase_url: str = get_secret('supabase_url')
+    supabase_service_key: str = get_secret('supabase_service_key')
     
     # Model settings
     embedding_model: str = EMBEDDING_MODEL

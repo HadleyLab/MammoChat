@@ -29,12 +29,36 @@ cd MammoChat
 pip install -r requirements.txt
 ```
 
-3. Set up environment variables in `.env`:
-```env
-OPENAI_API_KEY=your_openai_api_key
-SUPABASE_URL=your_supabase_url
-SUPABASE_SERVICE_KEY=your_supabase_service_key
-```
+3. Configure secrets:
+
+   The application supports two methods of configuration:
+
+   **Option A: Streamlit Secrets (Recommended for Streamlit apps)**
+   1. Copy the example secrets file:
+   ```bash
+   cp .streamlit/secrets.toml.example .streamlit/secrets.toml
+   ```
+   2. Edit `.streamlit/secrets.toml` with your API keys:
+   ```toml
+   [api_keys]
+   openai = "your-openai-api-key"
+   supabase_url = "your-supabase-url"
+   supabase_service_key = "your-supabase-service-key"
+   ```
+   Note: The `secrets.toml` file is excluded from version control for security.
+
+   For Streamlit Cloud deployment:
+   - Add these secrets via the Streamlit Cloud dashboard
+
+   **Option B: Environment Variables (For scripts and non-Streamlit usage)**
+   Create a `.env` file:
+   ```env
+   OPENAI_API_KEY=your_openai_api_key
+   SUPABASE_URL=your_supabase_url
+   SUPABASE_SERVICE_KEY=your_supabase_service_key
+   ```
+
+   The application will first try to use Streamlit secrets, and fall back to environment variables if needed.
 
 ## Usage
 
