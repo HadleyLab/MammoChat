@@ -1,37 +1,30 @@
-"""
-Document Processing Pipeline for Mammo.Chat
+"""Document Processing Pipeline for MammoChat.
 
-This module provides a comprehensive pipeline for processing documents in two phases:
-1. Crawling & Storage Phase: Crawl websites and store raw content without AI processing
-2. AI Processing Phase: Process stored content with OpenAI APIs for embeddings and summaries
+This module provides a comprehensive pipeline for processing medical documentation
+in two phases:
 
-Features:
-    - Two-phase processing to separate crawling from AI processing
-    - Configurable crawling parameters
-    - Batch processing with progress tracking
-    - Comprehensive logging
-    - Error handling and retry mechanisms
-    - Support for different content sources
-    - Memory efficient processing
+1. Crawling & Storage Phase:
+   - Crawl trusted medical websites
+   - Store raw content without AI processing
+   - Support for concurrent crawling
 
-Requirements:
-    - OpenAI API key (only for AI processing phase)
-    - Supabase credentials
-    - Environment variables in .env file:
-        - SUPABASE_URL
-        - SUPABASE_SERVICE_KEY
-        - OPENAI_API_KEY (only for AI processing)
+2. AI Processing Phase:
+   - Process stored content with OpenAI APIs
+   - Generate embeddings for semantic search
+   - Create summaries for content chunks
 
-Usage:
+The pipeline is designed to be memory efficient and fault-tolerant, with
+comprehensive logging and error handling throughout the process.
+
+Typical usage:
     # Phase 1: Crawl and store raw content
-    python process_documents.py crawl --source <source_name> --urls <url1> [<url2> ...] [--max-concurrent 5]
-    
-    Example:
-    python process_documents.py crawl --source breastcancer_org --urls https://www.breastcancer.org/treatment https://www.breastcancer.org/symptoms
-    
+    python process_documents.py crawl --source komen_org --urls https://www.komen.org/treatment
+
     # Phase 2: Process stored content with AI
-    python process_documents.py process [--batch-size 50]
+    python process_documents.py process --batch-size 50
 """
+
+from __future__ import annotations
 
 import os
 import sys
@@ -39,13 +32,12 @@ import json
 import asyncio
 import logging
 import argparse
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 
 # Third-party imports
-from dotenv import load_dotenv
 import openai
 from openai.types.chat import ChatCompletion
 from supabase import create_client, Client
@@ -58,12 +50,32 @@ from tenacity import (
 )
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 
-# Load environment variables
-load_dotenv()
+from config import config
 
 @dataclass
-class Config:
-    """Configuration settings for the document processing pipeline"""
+class ProcessingConfig:
+    """Configuration settings for the document processing pipeline.
+    
+    This class defines all configurable parameters for both the crawling
+    and processing phases of the pipeline.
+    
+    Attributes:
+        MAX_CONCURRENT: Maximum number of concurrent crawls
+        CHUNK_SIZE: Target size for content chunks
+        MIN_CHUNK_LENGTH: Minimum length for a valid chunk
+        BROWSER_HEADLESS: Whether to run browser in headless mode
+        BROWSER_USER_AGENT: User agent string for crawling
+        CACHE_MODE: Cache mode for crawler
+        BATCH_SIZE: Number of pages to process in each batch
+        MAX_RETRIES: Maximum number of retry attempts
+        RETRY_MIN_WAIT: Minimum wait time between retries
+        RETRY_MAX_WAIT: Maximum wait time between retries
+        TABLE: Database table name
+        LOG_FORMAT: Format string for log messages
+        LOG_LEVEL: Logging level
+        LOG_FILE: Path to log file
+        SYSTEM_PROMPT: Prompt for AI title/summary generation
+    """
     
     # Crawling Settings
     MAX_CONCURRENT: int = 5
@@ -78,13 +90,6 @@ class Config:
     MAX_RETRIES: int = 3
     RETRY_MIN_WAIT: int = 4
     RETRY_MAX_WAIT: int = 10
-    
-    # OpenAI Settings
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4-mini")
-    EMBEDDING_MODEL: str = "text-embedding-3-small"
-    MAX_PROMPT_LENGTH: int = 1000
-    TEMPERATURE: float = 0.0
-    TOP_P: float = 1.0
     
     # Database Settings
     TABLE: str = "site_pages"
@@ -103,39 +108,64 @@ class Config:
 
 # Configure logging
 logging.basicConfig(
-    level=Config.LOG_LEVEL,
-    format=Config.LOG_FORMAT,
+    level=ProcessingConfig.LOG_LEVEL,
+    format=ProcessingConfig.LOG_FORMAT,
     handlers=[
-        logging.FileHandler(Config.LOG_FILE),
+        logging.FileHandler(ProcessingConfig.LOG_FILE),
         logging.StreamHandler()
     ]
 )
 
 class ProcessingPhase(Enum):
-    """Enum for different processing phases"""
+    """Processing phases for the document pipeline.
+    
+    Attributes:
+        CRAWL: Phase 1 - Crawl and store raw content
+        PROCESS: Phase 2 - Process stored content with AI
+    """
     CRAWL = "crawl"
     PROCESS = "process"
 
 class DatabaseManager:
-    """Handles all database operations"""
+    """Database operations manager for the document pipeline.
     
-    def __init__(self, client: Client):
+    This class handles all interactions with the Supabase database,
+    including storing and updating document chunks.
+    
+    Attributes:
+        client: Initialized Supabase client
+    """
+    
+    def __init__(self, client: Client) -> None:
+        """Initialize database manager.
+        
+        Args:
+            client: Supabase client instance
+        """
         self.client = client
     
     async def store_page_chunk(self, chunk: Dict[str, Any]) -> None:
-        """Store a processed chunk in the site_pages table"""
+        """Store a processed chunk in the database.
+        
+        Args:
+            chunk: Document chunk data including content and metadata
+            
+        Raises:
+            Exception: If there's an error storing the chunk
+        """
         try:
-            # Use upsert operation with url and chunk_number as unique constraints
             url = chunk.get('url')
             chunk_number = chunk.get('chunk_number')
             
-            # Prepare and execute the query synchronously since Supabase client doesn't support async
-            response = self.client.table(Config.TABLE).upsert(chunk, on_conflict='url,chunk_number').execute()
+            # Prepare and execute the query
+            response = self.client.table(ProcessingConfig.TABLE).upsert(
+                chunk, 
+                on_conflict='url,chunk_number'
+            ).execute()
             
             if hasattr(response, 'error') and response.error:
                 raise Exception(f"Supabase error: {response.error}")
             
-            # Log success
             logging.info(f"Upserted chunk {chunk_number} for URL {url}")
             
         except Exception as e:
@@ -143,14 +173,38 @@ class DatabaseManager:
             raise
 
 class ContentProcessor:
-    """Handles content processing operations"""
+    """Content processing operations manager.
     
-    def __init__(self, openai_client: Optional[openai.AsyncOpenAI] = None):
+    This class handles all content processing operations including
+    text chunking, embedding generation, and AI-powered summarization.
+    
+    Attributes:
+        openai_client: Optional OpenAI client for AI operations
+    """
+    
+    def __init__(self, openai_client: Optional[openai.AsyncOpenAI] = None) -> None:
+        """Initialize content processor.
+        
+        Args:
+            openai_client: Optional OpenAI client for AI operations
+        """
         self.openai_client = openai_client
 
-    def chunk_text(self, text: str, chunk_size: int = Config.CHUNK_SIZE) -> List[str]:
-        """Split text into chunks, respecting content boundaries"""
-        chunks = []
+    def chunk_text(
+        self, 
+        text: str, 
+        chunk_size: int = ProcessingConfig.CHUNK_SIZE
+    ) -> List[str]:
+        """Split text into chunks, respecting content boundaries.
+        
+        Args:
+            text: Text to split into chunks
+            chunk_size: Target size for each chunk
+            
+        Returns:
+            List of text chunks
+        """
+        chunks: List[str] = []
         start = 0
         text_length = len(text)
 
@@ -182,7 +236,7 @@ class ContentProcessor:
                     end = start + last_period + 1
 
             chunk = text[start:end].strip()
-            if chunk and len(chunk) >= Config.MIN_CHUNK_LENGTH:
+            if chunk and len(chunk) >= ProcessingConfig.MIN_CHUNK_LENGTH:
                 chunks.append(chunk)
 
             start = end
@@ -190,21 +244,34 @@ class ContentProcessor:
         return chunks
 
     @retry(
-        stop=stop_after_attempt(Config.MAX_RETRIES),
-        wait=wait_exponential(multiplier=1, min=Config.RETRY_MIN_WAIT, max=Config.RETRY_MAX_WAIT),
+        stop=stop_after_attempt(ProcessingConfig.MAX_RETRIES),
+        wait=wait_exponential(
+            multiplier=1, 
+            min=ProcessingConfig.RETRY_MIN_WAIT, 
+            max=ProcessingConfig.RETRY_MAX_WAIT
+        ),
         retry=retry_if_exception_type(openai.APIError)
     )
     async def get_embedding(self, text: str) -> Optional[List[float]]:
-        """Generate embedding vector for text"""
+        """Generate embedding vector for text.
+        
+        Args:
+            text: Text to generate embedding for
+            
+        Returns:
+            Embedding vector or None on error
+            
+        Raises:
+            ValueError: If OpenAI client is not initialized
+        """
         if not self.openai_client:
             raise ValueError("OpenAI client not initialized")
             
         try:
             response = await self.openai_client.embeddings.create(
-                model=Config.EMBEDDING_MODEL,
+                model=config.embedding_model,
                 input=text
             )
-            # Properly handle the embedding response
             if hasattr(response.data[0], 'embedding'):
                 return response.data[0].embedding
             else:
@@ -215,29 +282,43 @@ class ContentProcessor:
             raise
 
     @retry(
-        stop=stop_after_attempt(Config.MAX_RETRIES),
-        wait=wait_exponential(multiplier=1, min=Config.RETRY_MIN_WAIT, max=Config.RETRY_MAX_WAIT),
+        stop=stop_after_attempt(ProcessingConfig.MAX_RETRIES),
+        wait=wait_exponential(
+            multiplier=1, 
+            min=ProcessingConfig.RETRY_MIN_WAIT, 
+            max=ProcessingConfig.RETRY_MAX_WAIT
+        ),
         retry=retry_if_exception_type(openai.APIError)
     )
-    async def get_title_and_summary(self, chunk: str, url: str) -> Dict[str, str]:
-        """Generate title and summary for content chunk"""
+    async def get_title_and_summary(
+        self, 
+        chunk: str, 
+        url: str
+    ) -> Dict[str, str]:
+        """Generate title and summary for content chunk.
+        
+        Args:
+            chunk: Content chunk to process
+            url: Source URL of the content
+            
+        Returns:
+            Dictionary containing title and summary
+            
+        Raises:
+            ValueError: If OpenAI client is not initialized
+        """
         if not self.openai_client:
             raise ValueError("OpenAI client not initialized")
             
-        system_prompt = """You are an AI that extracts titles and summaries from documentation chunks.
-        Return a JSON object with 'title' and 'summary' keys.
-        For the title: If this seems like the start of a document, extract its title. If it's a middle chunk, derive a descriptive title.
-        For the summary: Create a concise summary of the main points in this chunk.
-        Keep both title and summary concise but informative."""
-        
         try:
             response = await self.openai_client.chat.completions.create(
-                model=Config.LLM_MODEL,
+                model=config.llm_model,
                 messages=[
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": ProcessingConfig.SYSTEM_PROMPT},
                     {"role": "user", "content": f"URL: {url}\n\nContent:\n{chunk[:1000]}..."}
                 ],
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                temperature=config.llm_temperature
             )
             return json.loads(response.choices[0].message.content)
         except Exception as e:
@@ -245,26 +326,45 @@ class ContentProcessor:
             raise
 
 class DocumentPipeline:
-    """Main pipeline for document processing"""
+    """Main document processing pipeline.
     
-    def __init__(self):
-        # Initialize clients
+    This class orchestrates the entire document processing workflow,
+    managing both the crawling and AI processing phases.
+    
+    Attributes:
+        supabase: Supabase client
+        db: Database manager instance
+        processor: Content processor instance
+    """
+    
+    def __init__(self) -> None:
+        """Initialize the document pipeline."""
         self.supabase = create_client(
-            os.getenv("SUPABASE_URL", ""),
-            os.getenv("SUPABASE_SERVICE_KEY", "")
+            config.supabase_url,
+            config.supabase_service_key
         )
         self.db = DatabaseManager(self.supabase)
         self.processor = ContentProcessor()
 
-    async def crawl_urls(self, urls: List[str], max_concurrent: int, source: str) -> None:
-        """Crawl URLs and process content directly into site_pages"""
+    async def crawl_urls(
+        self, 
+        urls: Sequence[str], 
+        max_concurrent: int, 
+        source: str
+    ) -> None:
+        """Crawl URLs and process content.
+        
+        Args:
+            urls: List of URLs to crawl
+            max_concurrent: Maximum concurrent crawls
+            source: Source identifier for the content
+        """
         semaphore = asyncio.Semaphore(max_concurrent)
-        # Initialize OpenAI client for processing
         self.processor.openai_client = openai.AsyncOpenAI(
-            api_key=os.getenv("OPENAI_API_KEY", "")
+            api_key=config.openai_api_key
         )
         
-        async def process_url(url: str):
+        async def process_url(url: str) -> None:
             async with semaphore:
                 try:
                     crawler = AsyncWebCrawler()
@@ -283,16 +383,11 @@ class DocumentPipeline:
                                 content = result.text
                         
                         if content:
-                            # Split content into chunks and process each
                             chunks = self.processor.chunk_text(content)
                             for i, chunk_content in enumerate(chunks):
-                                # Generate title and summary
                                 title_summary = await self.processor.get_title_and_summary(chunk_content, url)
-                                
-                                # Generate embedding
                                 embedding = await self.processor.get_embedding(chunk_content)
                                 
-                                # Store chunk
                                 chunk = {
                                     "url": url,
                                     "chunk_number": i,
@@ -318,10 +413,13 @@ class DocumentPipeline:
         await asyncio.gather(*tasks)
 
     async def process_stored_pages(self, batch_size: int) -> None:
-        """Process stored pages in batches with AI"""
-        # Initialize OpenAI client for processing
+        """Process stored pages in batches with AI.
+        
+        Args:
+            batch_size: Number of pages to process in each batch
+        """
         self.processor.openai_client = openai.AsyncOpenAI(
-            api_key=os.getenv("OPENAI_API_KEY", "")
+            api_key=config.openai_api_key
         )
         
         try:
@@ -329,8 +427,7 @@ class DocumentPipeline:
             total_processed = 0
             
             while True:
-                # Get unprocessed pages with pagination
-                response = self.supabase.table(Config.TABLE) \
+                response = self.supabase.table(ProcessingConfig.TABLE) \
                     .select("*") \
                     .is_("embedding", "null") \
                     .range(offset, offset + batch_size - 1) \
@@ -347,20 +444,16 @@ class DocumentPipeline:
                         logging.info(f"Completed processing {total_processed} pages")
                     return
                 
-                # Process current batch
                 batch = pages
                 tasks = []
                 
                 for page in batch:
-                    # Generate embedding
                     tasks.append(self.processor.get_embedding(page["content"]))
                 
-                # Wait for all embeddings in batch
                 embeddings = await asyncio.gather(*tasks)
                 
-                # Update pages with embeddings
                 for page, embedding in zip(batch, embeddings):
-                    self.supabase.table(Config.TABLE).update({
+                    self.supabase.table(ProcessingConfig.TABLE).update({
                         "embedding": embedding,
                         "metadata": {
                             **page.get("metadata", {}),
@@ -378,8 +471,15 @@ class DocumentPipeline:
                 logging.info(f"Partially completed: processed {total_processed} pages before error")
             raise
 
-def parse_args():
-    """Parse command line arguments"""
+def parse_args() -> argparse.Namespace:
+    """Parse command line arguments.
+    
+    Returns:
+        Parsed command line arguments
+        
+    Raises:
+        SystemExit: If required arguments are missing
+    """
     parser = argparse.ArgumentParser(
         description="Two-phase document processing pipeline for web content",
         usage="%(prog)s {crawl,process} [options]\n\n"
@@ -417,13 +517,13 @@ def parse_args():
     parser.add_argument(
         "--max-concurrent",
         type=int,
-        default=Config.MAX_CONCURRENT,
+        default=ProcessingConfig.MAX_CONCURRENT,
         help="Maximum concurrent crawls"
     )
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=Config.BATCH_SIZE,
+        default=ProcessingConfig.BATCH_SIZE,
         help="Batch size for processing"
     )
     args = parser.parse_args()
@@ -440,8 +540,8 @@ def parse_args():
             
     return args
 
-async def main():
-    """Main entry point"""
+async def main() -> None:
+    """Main entry point for the document processing pipeline."""
     args = parse_args()
     pipeline = DocumentPipeline()
     
