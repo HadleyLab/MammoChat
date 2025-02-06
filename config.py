@@ -32,7 +32,11 @@ def get_secret(key: str, default: str = '') -> str:
         The secret value
     """
     try:
-        return st.secrets["api_keys"][key]
+        value = st.secrets["api_keys"][key]
+        # Set OpenAI API key in environment if found in secrets
+        if key == 'openai':
+            os.environ["OPENAI_API_KEY"] = value
+        return value
     except (FileNotFoundError, KeyError):
         # Fall back to environment variables if Streamlit secrets not available
         env_key = key.upper()
@@ -94,8 +98,13 @@ class Config:
         Raises:
             ValueError: If any required API keys are missing
         """
-        if not self.openai_api_key:
-            raise ValueError("OpenAI API key is required")
+        # Set OpenAI API key in environment if not already set
+        if not os.getenv("OPENAI_API_KEY"):
+            if self.openai_api_key:
+                os.environ["OPENAI_API_KEY"] = self.openai_api_key
+            else:
+                raise ValueError("OpenAI API key is required")
+                
         if not self.supabase_url:
             raise ValueError("Supabase URL is required")
         if not self.supabase_service_key:
