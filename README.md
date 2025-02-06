@@ -7,7 +7,7 @@ MammoChat is an AI-powered medical information assistant designed to provide rel
 - 🎯 **Source-Verified Information**: Only uses trusted medical sources like BreastCancer.org and Komen.org
 - 🔍 **Smart Retrieval**: Uses embeddings and semantic search to find relevant information
 - 💬 **Interactive Chat Interface**: Built with Streamlit for easy interaction
-- 📚 **Document Processing**: Asynchronous processing of medical documents with automatic embedding generation
+- 📚 **Document Processing**: Two-phase document processing pipeline for efficient content management
 - 🔄 **Real-time Updates**: Streaming responses for better user experience
 
 ## Prerequisites
@@ -38,6 +38,7 @@ SUPABASE_SERVICE_KEY=your_supabase_service_key
 
 ## Usage
 
+### Chat Interface
 Start the Streamlit app:
 ```bash
 streamlit run MammoChat.py
@@ -45,11 +46,41 @@ streamlit run MammoChat.py
 
 Once the application is running, you can interact with the AI assistant through the web interface. Simply type your questions related to breast cancer, and the assistant will provide reliable information from trusted sources.
 
+### Document Processing Pipeline
+
+The project includes a comprehensive document processing pipeline (`process_documents.py`) that operates in two phases:
+
+1. **Crawling & Storage Phase**
+   ```bash
+   # Crawl and store content without AI processing
+   python process_documents.py crawl --source komen_org --max-concurrent 5
+   ```
+   - Crawls websites and stores raw content
+   - No OpenAI API calls during this phase
+   - Configurable concurrency for efficient crawling
+   - Automatic content chunking and storage
+
+2. **AI Processing Phase**
+   ```bash
+   # Process stored content with AI
+   python process_documents.py process --batch-size 50 --max-retries 3
+   ```
+   - Processes stored content using OpenAI APIs
+   - Generates embeddings and summaries
+   - Batch processing with progress tracking
+   - Automatic retry mechanism for API calls
+
+This two-phase approach offers several benefits:
+- Separates crawling from AI processing for better cost management
+- Allows for efficient re-processing of content if needed
+- Provides robust error handling and logging
+- Supports different content sources and processing configurations
+
 ## Project Structure
 
 - `MammoChat.py`: Main Streamlit application with chat interface
 - `MammoChat_agent.py`: Core agent logic and RAG implementation
-- `async_document_processor.py`: Asynchronous document processing and embedding generation
+- `process_documents.py`: Two-phase document processing pipeline
 - `requirements.txt`: Project dependencies
 
 ## Architecture
@@ -60,11 +91,25 @@ The system uses a Retrieval-Augmented Generation (RAG) approach:
 2. User queries are embedded and matched against the document database
 3. Relevant content is retrieved and used to generate accurate responses
 
-### Document Processing
-- Asynchronous processing with configurable batch sizes
-- Automatic embedding generation using OpenAI
-- Title and summary generation for better organization
-- Health checks and error handling for production reliability
+### Document Processing Pipeline
+The pipeline is designed for efficiency and reliability:
+- **Phase 1: Crawling & Storage**
+  - Asynchronous web crawling with concurrency control
+  - Content chunking with natural boundary detection
+  - Raw storage without AI processing
+  - Comprehensive error handling and logging
+
+- **Phase 2: AI Processing**
+  - Batch processing of stored content
+  - Automatic embedding generation
+  - Title and summary extraction
+  - Progress tracking and retry mechanisms
+  - Efficient database operations
+
+### Database Schema
+The pipeline uses two main tables in Supabase:
+- `raw_pages`: Stores unprocessed content from crawling phase
+- `processed_chunks`: Stores AI-processed chunks with embeddings
 
 ## Contributing
 

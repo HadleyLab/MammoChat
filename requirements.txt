@@ -1,0 +1,24 @@
+# Core dependencies
+python-dotenv>=1.0.0  # Environment variable management
+openai>=1.0.0         # OpenAI API client
+supabase>=1.0.3       # Supabase client
+streamlit>=1.24.0     # Web interface
+
+# Document processing
+crawl4ai>=0.1.0       # Web crawling
+tqdm>=4.65.0          # Progress bars
+tenacity>=8.2.2       # Retry mechanisms
+requests>=2.31.0      # HTTP client
+beautifulsoup4>=4.12.2  # HTML parsing
+
+# Async support
+aiohttp>=3.8.5        # Async HTTP client
+asyncio>=3.4.3        # Async I/O support
+
+# Type hints and data structures
+typing-extensions>=4.7.1  # Enhanced type hints
+dataclasses>=0.6      # Data classes support
+
+# Utilities
+python-dateutil>=2.8.2  # Date utilities
+pytz>=2023.3          # Timezone support
