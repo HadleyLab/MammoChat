@@ -56,7 +56,7 @@ def get_secret(key: str, default: str = '') -> str:
 
 # Model configurations
 EMBEDDING_MODEL: str = "text-embedding-3-small"
-LLM_MODEL: str = "gpt-4-mini"
+LLM_MODEL: str = "gpt-4o-mini"
 LLM_TEMPERATURE: float = 0.7
 MATCH_THRESHOLD: float = 0.5
 MATCH_COUNT: int = 5
