@@ -41,7 +41,7 @@ SUPABASE_SERVICE_KEY=your_supabase_service_key
 ### Chat Interface
 Start the Streamlit app:
 ```bash
-streamlit run MammoChat.py
+streamlit run app.py
 ```
 
 Once the application is running, you can interact with the AI assistant through the web interface. Simply type your questions related to breast cancer, and the assistant will provide reliable information from trusted sources.
@@ -53,12 +53,12 @@ The project includes a comprehensive document processing pipeline (`process_docu
 1. **Crawling & Storage Phase**
    ```bash
    # Crawl and store content without AI processing
-   python process_documents.py crawl --source komen_org --max-concurrent 5
+   python process_documents.py crawl --source komen_org --urls komen.org --max-concurrent 5
    ```
    - Crawls websites and stores raw content
    - No OpenAI API calls during this phase
    - Configurable concurrency for efficient crawling
-   - Automatic content chunking and storage
+   - Automatic content chunking and storage of documents
 
 2. **AI Processing Phase**
    ```bash
@@ -66,7 +66,7 @@ The project includes a comprehensive document processing pipeline (`process_docu
    python process_documents.py process --batch-size 50 --max-retries 3
    ```
    - Processes stored content using OpenAI APIs
-   - Generates embeddings and summaries
+   - Generates embeddings, titles and summaries of chunks
    - Batch processing with progress tracking
    - Automatic retry mechanism for API calls
 
@@ -78,7 +78,7 @@ This two-phase approach offers several benefits:
 
 ## Project Structure
 
-- `MammoChat.py`: Main Streamlit application with chat interface
+- `app.py`: Main Streamlit application with chat interface
 - `MammoChat_agent.py`: Core agent logic and RAG implementation
 - `process_documents.py`: Two-phase document processing pipeline
 - `requirements.txt`: Project dependencies
