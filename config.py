@@ -9,7 +9,7 @@ Attributes:
     LLM_TEMPERATURE (float): Temperature setting for language model responses
     MATCH_THRESHOLD (float): Minimum similarity threshold for content matching
     MATCH_COUNT (int): Number of matches to return in search results
-    TRUSTED_SOURCES (list): List of approved medical information sources
+    TRUSTED_SOURCES (List[str]): List of approved medical information sources with markdown links
 """
 
 import os
@@ -17,6 +17,12 @@ from dataclasses import dataclass
 from typing import List
 from dotenv import load_dotenv
 import streamlit as st
+
+# Trusted sources with markdown links
+TRUSTED_SOURCES: List[str] = [
+    "[BreastCancer.org](https://www.breastcancer.org)",
+    "[Komen.org](https://www.komen.org)"
+]
 
 # Load environment variables as fallback
 load_dotenv()
@@ -50,16 +56,10 @@ def get_secret(key: str, default: str = '') -> str:
 
 # Model configurations
 EMBEDDING_MODEL: str = "text-embedding-3-small"
-LLM_MODEL: str = "gpt-4o-mini"
+LLM_MODEL: str = "gpt-4-mini"
 LLM_TEMPERATURE: float = 0.7
 MATCH_THRESHOLD: float = 0.5
 MATCH_COUNT: int = 5
-
-# Trusted sources
-TRUSTED_SOURCES: List[str] = [
-    "BreastCancer.org",
-    "Komen.org"
-]
 
 @dataclass
 class Config:

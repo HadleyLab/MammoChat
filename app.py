@@ -18,7 +18,7 @@ from supabase import Client
 from openai import AsyncOpenAI
 
 import os
-from config import config
+from config import config, TRUSTED_SOURCES
 
 # Set OpenAI API key in environment variable
 os.environ["OPENAI_API_KEY"] = config.openai_api_key
@@ -115,9 +115,9 @@ async def run_agent_with_streaming(user_input: str):
 
 async def main():
     st.title("Mammo.Chat™ -- Breast Cancer AI")
-    st.write("""
+    st.write(f"""
     AI-Guided Navigation of Breast Cancer from Trusted Sources:
-    [BreastCancer.org](https://www.breastcancer.org), [Komen.org](https://www.komen.org)
+    {', '.join(TRUSTED_SOURCES)}
     """)
 
     # Initialize chat history in session state if not present

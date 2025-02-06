@@ -2,6 +2,10 @@
 
 MammoChat is an AI-powered medical information assistant designed to provide reliable breast cancer information from trusted sources. It uses RAG (Retrieval-Augmented Generation) to ensure accurate information delivery from reputable sources like BreastCancer.org and Komen.org.
 
+## DEMO
+
+Try the live demo at: [https://mammochat.streamlit.app](https://mammochat.streamlit.app)
+
 ## Features
 
 - 🎯 **Source-Verified Information**: Only uses trusted medical sources like BreastCancer.org and Komen.org

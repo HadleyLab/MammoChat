@@ -21,11 +21,14 @@ from pydantic_ai.models.openai import OpenAIModel
 from openai import AsyncOpenAI
 from supabase import Client
 
-from config import config
+from config import config, TRUSTED_SOURCES
 
 # Ensure OpenAI API key is set in environment
 if not os.getenv("OPENAI_API_KEY"):
     os.environ["OPENAI_API_KEY"] = config.openai_api_key
+
+# Format trusted sources for system prompt
+sources_list = "\n".join(f"{i+1}. {source}" for i, source in enumerate(TRUSTED_SOURCES))
 
 # Initialize OpenAI model
 model = OpenAIModel(config.llm_model)
@@ -45,12 +48,11 @@ class SourceDeps:
     openai_client: AsyncOpenAI
 
 # System prompt defining agent behavior and response format
-system_prompt = """
+system_prompt = f"""
 **Role:** Medical Information Specialist  
 
 **Sources:** Only use:  
-1. [BreastCancer.org](https://www.breastcancer.org)  
-2. [Komen.org](https://www.komen.org)  
+{sources_list}
 
 **Protocols:**  
 - Do NOT cite any other sources or widely known facts and public knowledge 
