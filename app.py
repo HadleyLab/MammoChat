@@ -23,7 +23,7 @@ from config import config, TRUSTED_SOURCES
 try:
     # Set OpenAI API key in environment variable
     os.environ["OPENAI_API_KEY"] = config.openai_api_key
-    st.write("OpenAI API key configured successfully")
+    logfire.info("OpenAI API key configured successfully")
 except Exception as e:
     st.error(f"Failed to configure OpenAI API key: {str(e)}")
     logfire.error("OpenAI API key configuration failed", error=str(e))
@@ -44,7 +44,7 @@ from agent import chat_agent, SourceDeps
 
 try:
     openai_client = AsyncOpenAI()  # Will use OPENAI_API_KEY from environment
-    st.write("OpenAI client initialized successfully")
+    logfire.info("OpenAI client initialized successfully")
 except Exception as e:
     st.error(f"Failed to initialize OpenAI client: {str(e)}")
     logfire.error("OpenAI client initialization failed", error=str(e))
@@ -54,7 +54,7 @@ try:
         config.supabase_url,
         config.supabase_service_key
     )
-    st.write("Supabase client initialized successfully")
+    logfire.info("Supabase client initialized successfully")
 except Exception as e:
     st.error(f"Failed to initialize Supabase client: {str(e)}")
     logfire.error("Supabase client initialization failed", error=str(e))
