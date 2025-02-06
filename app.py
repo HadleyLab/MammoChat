@@ -17,7 +17,11 @@ import logfire
 from supabase import Client
 from openai import AsyncOpenAI
 
+import os
 from config import config
+
+# Set OpenAI API key in environment variable
+os.environ["OPENAI_API_KEY"] = config.openai_api_key
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -33,7 +37,7 @@ from pydantic_ai.messages import (
 )
 from agent import chat_agent, SourceDeps
 
-openai_client = AsyncOpenAI(api_key=config.openai_api_key)
+openai_client = AsyncOpenAI()  # Will use OPENAI_API_KEY from environment
 supabase: Client = Client(
     config.supabase_url,
     config.supabase_service_key

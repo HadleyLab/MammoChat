@@ -13,6 +13,7 @@ from __future__ import annotations as _annotations
 from dataclasses import dataclass
 import logfire
 import asyncio
+import os
 from typing import List, Optional
 
 from pydantic_ai import Agent, ModelRetry, RunContext
@@ -21,6 +22,10 @@ from openai import AsyncOpenAI
 from supabase import Client
 
 from config import config
+
+# Ensure OpenAI API key is set in environment
+if not os.getenv("OPENAI_API_KEY"):
+    os.environ["OPENAI_API_KEY"] = config.openai_api_key
 
 # Initialize OpenAI model
 model = OpenAIModel(config.llm_model)
