@@ -110,17 +110,27 @@ async def retrieve_relevant_documentation(ctx: RunContext[SourceDeps], user_quer
         # Get the embedding for the query
         query_embedding = await get_embedding(user_query, ctx.deps.openai_client)
         
-        # Query Supabase for relevant documents
-        result = ctx.deps.supabase.rpc(
-            'match_site_pages',
-            {
-                'query_embedding': query_embedding,
-                'match_count': config.match_count
-            }
-        ).execute()
-        
-        if not result.data:
-            return "No relevant documentation found."
+        try:
+            # Query Supabase for relevant documents
+            logfire.info("Attempting to match documents with query embedding")
+            result = ctx.deps.supabase.rpc(
+                'match_site_pages',
+                {
+                    'query_embedding': query_embedding,
+                    'match_count': config.match_count
+                }
+            ).execute()
+            
+            if not result.data:
+                logfire.warning("No matching documents found in database")
+                return "No relevant documentation found."
+                
+            logfire.info(f"Found {len(result.data)} matching documents")
+        except Exception as e:
+            error_msg = f"Error querying Supabase: {str(e)}"
+            logfire.error(error_msg)
+            st.error(error_msg)
+            return error_msg
             
         # Format the results
         formatted_chunks = []
